@@ -1,16 +1,16 @@
-// index.js — RevisionVault v4 (modular)
+// index.js — RevisionVault v5
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const cron = require("node-cron");
-const notifier = require("node-notifier");
 const { Item, Mem, Category } = require("./models");
 const { debug, info, warn, error } = require("./utils/logger");
 
 const itemsRouter = require("./routes/items");
 const memsRouter = require("./routes/mems");
 const categoriesRouter = require("./routes/categories");
+const ratingsRouter = require("./routes/ratings");
+const todosRouter = require("./routes/todos");
 const { calculateStreak } = require("./services/streak-service");
 const { setupReminders } = require("./services/reminder-service");
 
@@ -29,37 +29,33 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     const logFn = res.statusCode >= 400 ? warn : info;
     logFn(`${req.method} ${req.originalUrl} completed`, {
-      method: req.method,
-      path: req.originalUrl,
-      query: req.query,
-      params: req.params,
-      userId: req.body?.userId,
-      statusCode: res.statusCode,
-      duration_ms: duration,
+      method: req.method, path: req.originalUrl,
+      statusCode: res.statusCode, duration_ms: duration,
     });
   });
   next();
 });
 
-info("Server startup", { version: "4", port: PORT, nodeVersion: process.version });
+info("Server startup", { version: "5", port: PORT });
 
 mongoose.connect(MONGO_URI)
   .then(() => info("MongoDB connected"))
-  .catch((e) => { error("MongoDB connection failed", { error: e.message, stack: e.stack }); process.exit(1); });
+  .catch((e) => { error("MongoDB connection failed", { error: e.message }); process.exit(1); });
 
 app.get("/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 app.use("/api/items", itemsRouter);
 app.use("/api/mems", memsRouter);
 app.use("/api/categories", categoriesRouter);
+app.use("/api/ratings", ratingsRouter);
+app.use("/api/todos", todosRouter);
 
 app.get("/api/items/:userId/streak", async (req, res) => {
   try {
     const streakData = await calculateStreak(req.params.userId);
-    info("Streak calculated", { userId: req.params.userId, ...streakData });
     res.json({ ok: true, ...streakData });
   } catch (e) {
-    error("Streak calculation failed", { userId: req.params.userId, error: e.message, stack: e.stack });
+    error("Streak calculation failed", { error: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -94,11 +90,11 @@ app.get("/api/analytics/:userId", async (req, res) => {
       return { label: `+${days}d`, eligible: eligible.length, completed: completed.length, rate: eligible.length > 0 ? Math.round((completed.length / eligible.length) * 100) : null };
     });
 
-    const last30 = all.filter(i => i.savedDate >= (() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().split("T")[0]; })()).sort((a, b) => a.savedDate.localeCompare(b.savedDate));
+    const thirtyAgo = (() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().split("T")[0]; })();
+    const last30 = all.filter(i => i.savedDate >= thirtyAgo).sort((a, b) => a.savedDate.localeCompare(b.savedDate));
     const dayCategories = {};
     last30.forEach(i => { if (!dayCategories[i.savedDate]) dayCategories[i.savedDate] = {}; dayCategories[i.savedDate][i.category] = (dayCategories[i.savedDate][i.category] || 0) + 1; });
     const domCatPerDay = Object.entries(dayCategories).sort(([a], [b]) => a.localeCompare(b)).map(([date, cats]) => ({ date, cat: Object.entries(cats).sort((a,b) => b[1]-a[1])[0][0] }));
-
     let jumps = 0;
     for (let i = 1; i < domCatPerDay.length; i++) { if (domCatPerDay[i].cat !== domCatPerDay[i-1].cat) jumps++; }
     const jumpScore = domCatPerDay.length > 1 ? Math.round((jumps / (domCatPerDay.length - 1)) * 100) : 0;
@@ -113,17 +109,14 @@ app.get("/api/analytics/:userId", async (req, res) => {
     const dayNames = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
     const bestDayIdx = dayOfWeekCount.indexOf(Math.max(...dayOfWeekCount));
 
-    const urlCount = items.length;
-    const notesCount = mems.length;
-
     const catCompletion = {};
     all.forEach(i => { if (!catCompletion[i.category]) catCompletion[i.category] = { due: 0, done: 0 }; INTERVALS.forEach((_, idx) => { if (i.nextReviewDates?.[idx] && i.nextReviewDates[idx] <= today) { catCompletion[i.category].due++; if ((i.completedIntervals || []).includes(idx)) catCompletion[i.category].done++; } }); });
     const neglected = Object.entries(catCompletion).filter(([,v]) => v.due > 0).map(([cat, v]) => ({ cat, rate: Math.round((v.done / v.due) * 100) })).sort((a, b) => a.rate - b.rate)[0] || null;
 
-    res.json({ ok: true, totalItems: all.length, urlCount, notesCount, catCount, weeklyVelocity, intervalStats, jumpScore, domCatPerDay, categoryTimeline, dayOfWeekCount, dayNames, bestDay: dayNames[bestDayIdx], neglected });
-  } catch (e) { 
-    error("Analytics failed", { userId: req.params.userId, error: e.message, stack: e.stack });
-    res.status(500).json({ error: e.message }); 
+    res.json({ ok: true, totalItems: all.length, urlCount: items.length, notesCount: mems.length, catCount, weeklyVelocity, intervalStats, jumpScore, domCatPerDay, categoryTimeline, dayOfWeekCount, dayNames, bestDay: dayNames[bestDayIdx], neglected });
+  } catch (e) {
+    error("Analytics failed", { error: e.message });
+    res.status(500).json({ error: e.message });
   }
 });
 
