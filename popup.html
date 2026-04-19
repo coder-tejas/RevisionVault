@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>RevisionVault</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <span class="logo-icon">⚔️</span>
+      <span class="logo-text">RevisionVault</span>
+    </div>
+    <div class="header-right">
+      <div class="streak-pill" id="streakPill">
+        <span class="fire">🔥</span>
+        <span id="streakNum">0</span>
+        <span class="streak-sub">day streak</span>
+      </div>
+      <div class="server-dot" id="serverDot" title="Server status"></div>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="add">＋ Add</button>
+    <button class="tab-btn" data-tab="remember">🧠 Remember</button>
+    <button class="tab-btn" data-tab="today">Today <span class="due-badge" id="dueBadge"></span></button>
+    <button class="tab-btn" data-tab="calendar">Cal</button>
+    <button class="tab-btn" data-tab="vault">Vault</button>
+    <button class="tab-btn" data-tab="analytics">📊</button>
+  </nav>
+
+  <!-- ── TAB: ADD ── -->
+  <div class="tab-panel active" id="tab-add">
+    <div class="url-bar">
+      <span class="url-icon">🔗</span>
+      <span class="url-text" id="currentUrl">Loading…</span>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Category</label>
+      <div class="cat-grid" id="addCatGrid">
+        <!-- populated dynamically -->
+      </div>
+      <div class="new-cat-row" id="addNewCatRow">
+        <input class="new-cat-input" id="addNewCatInput" type="text" placeholder="New category name…" maxlength="30"/>
+        <button class="new-cat-btn" id="addNewCatBtn">＋ Add</button>
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Note <span class="opt">(optional)</span></label>
+      <input class="note-input" id="noteInput" type="text"
+             placeholder="e.g. Dijkstra — negative edge case broke me" maxlength="120"/>
+    </div>
+
+    <div class="review-preview">
+      <span class="rp-label">Reminders</span>
+      <div class="rp-chips" id="reviewChips"></div>
+    </div>
+
+    <button class="save-btn" id="saveBtn">Save to Vault</button>
+    <div class="toast hidden" id="toast"></div>
+  </div>
+
+  <!-- ── TAB: REMEMBER ── -->
+  <div class="tab-panel" id="tab-remember">
+    <div class="field-group">
+      <label class="field-label">Category</label>
+      <div class="cat-grid" id="remCatGrid">
+        <!-- populated dynamically -->
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Content</label>
+      <textarea class="mem-textarea" id="memContent"
+        placeholder="e.g. Two pointer trick: use left+right pointers, move the one that gives worse result. Works on sorted arrays.&#10;&#10;Or: grep -r 'pattern' /path — recursive search in all files"></textarea>
+    </div>
+
+    <div class="review-preview">
+      <span class="rp-label">Reminders</span>
+      <div class="rp-chips" id="remReviewChips"></div>
+    </div>
+
+    <button class="save-btn" id="remSaveBtn">Save to Remember</button>
+    <div class="toast hidden" id="remToast"></div>
+  </div>
+
+  <!-- ── TAB: TODAY ── -->
+  <div class="tab-panel" id="tab-today">
+    <div class="today-hdr">
+      <span class="today-title">Due Today</span>
+      <span class="today-date" id="todayDate"></span>
+    </div>
+    <div class="scroll-area" id="dueList">
+      <div class="empty-state"><div class="ei">🎯</div><p>Nothing due.<br/>Go build something!</p></div>
+    </div>
+  </div>
+
+  <!-- ── TAB: CALENDAR ── -->
+  <div class="tab-panel" id="tab-calendar">
+    <div class="cal-header">
+      <button class="cal-nav" id="calPrev">‹</button>
+      <span class="cal-month-label" id="calMonthLabel"></span>
+      <button class="cal-nav" id="calNext">›</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+    <div class="cal-day-detail" id="calDayDetail">
+      <div class="empty-state"><div class="ei">📅</div><p>Click a day to see what you studied.</p></div>
+    </div>
+  </div>
+
+  <!-- ── TAB: VAULT ── -->
+  <div class="tab-panel" id="tab-vault">
+    <div class="vault-filters" id="vaultFilters">
+      <!-- populated dynamically -->
+    </div>
+    <div class="scroll-area" id="vaultList">
+      <div class="empty-state"><div class="ei">📦</div><p>Vault is empty.</p></div>
+    </div>
+  </div>
+
+  <!-- ── TAB: ANALYTICS ── -->
+  <div class="tab-panel" id="tab-analytics">
+    <div class="scroll-area" id="analyticsScroll">
+      <div class="empty-state"><div class="ei">📊</div><p>Loading analytics…</p></div>
+    </div>
+  </div>
+
+</div>
+<script src="lib/constants.js"></script>
+<script src="lib/utils.js"></script>
+<script src="lib/api.js"></script>
+<script src="services/badge-service.js"></script>
+<script src="services/streak-service.js"></script>
+<script src="services/category-service.js"></script>
+<script src="tabs/review-chips.js"></script>
+<script src="tabs/add-tab.js"></script>
+<script src="tabs/remember-tab.js"></script>
+<script src="tabs/today-tab.js"></script>
+<script src="tabs/calendar-tab.js"></script>
+<script src="tabs/vault-tab.js"></script>
+<script src="tabs/analytics-tab.js"></script>
+<script src="popup.js"></script>
+</body>
+</html>
