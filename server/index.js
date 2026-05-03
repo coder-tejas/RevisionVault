@@ -18,7 +18,7 @@ function todayStr() { return new Date().toISOString().split("T")[0]; }
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const MONGO_URI = process.env.MONGO_URI;
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://lifelessgangster_db_user:w9qkbD8cFP7XV9FC@cluster0.lqssrla.mongodb.net/revise?appName=Cluster0";
 
 app.use(cors({ origin: "*" }));
 app.use(express.json());

@@ -59,5 +59,39 @@ window.RV.todayTab = {
     } catch {
       container.innerHTML = `<div class="empty-state"><div class="ei">❌</div><p>Server offline.<br/><code>node index.js</code></p></div>`;
     }
+  },
+
+  async renderWithRating(userId) {
+    const todayHdr = document.querySelector(".today-hdr");
+    if (!todayHdr) return;
+    
+    const existingWidget = document.getElementById("ratingWidget");
+    if (existingWidget) existingWidget.remove();
+    
+    const today = window.RV.utils.todayStr();
+    const month = today.slice(0, 7);
+    const ratings = await window.RV.api.getRatings(userId, month);
+    const currentRating = ratings[today] || 0;
+    const starsHtml = [1,2,3,4,5].map(n => {
+      const active = n <= currentRating ? " active" : "";
+      return `<button class="star-btn${active}" data-rating="${n}">★</button>`;
+    }).join("");
+    const ratingWidget = document.createElement("div");
+    ratingWidget.className = "rating-widget";
+    ratingWidget.id = "ratingWidget";
+    ratingWidget.innerHTML = `<div class="rating-label">Rate today:</div><div class="star-row">${starsHtml}</div>`;
+    todayHdr.parentNode.insertBefore(ratingWidget, todayHdr);
+    ratingWidget.querySelectorAll(".star-btn").forEach(btn => {
+      btn.addEventListener("click", async e => {
+        const rating = parseInt(e.target.dataset.rating);
+        await window.RV.api.saveRating(userId, today, rating);
+        this.renderWithRating(userId);
+        if (window.RV.calendarTab?.loadRatings) {
+          await window.RV.calendarTab.loadRatings();
+          window.RV.calendarTab.render();
+        }
+      });
+    });
+    await this.render(userId);
   }
 };

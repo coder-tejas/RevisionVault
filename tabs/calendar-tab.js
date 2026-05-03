@@ -5,6 +5,7 @@ window.RV.calendarTab = {
   calYear: null,
   calMonth: null,
   activityMap: {},
+  ratingsMap: {},
 
   async init() {
     const now = new Date();
@@ -12,6 +13,7 @@ window.RV.calendarTab = {
     this.calMonth = now.getMonth();
     this.setupCalNav();
     await this.loadActivityMap();
+    await this.loadRatings();
     this.render();
   },
 
@@ -19,12 +21,12 @@ window.RV.calendarTab = {
     document.getElementById("calPrev").addEventListener("click", () => {
       this.calMonth--;
       if (this.calMonth < 0) { this.calMonth = 11; this.calYear--; }
-      this.loadActivityMap().then(() => this.render());
+      Promise.all([this.loadActivityMap(), this.loadRatings()]).then(() => this.render());
     });
     document.getElementById("calNext").addEventListener("click", () => {
       this.calMonth++;
       if (this.calMonth > 11) { this.calMonth = 0; this.calYear++; }
-      this.loadActivityMap().then(() => this.render());
+      Promise.all([this.loadActivityMap(), this.loadRatings()]).then(() => this.render());
     });
   },
 
@@ -33,6 +35,15 @@ window.RV.calendarTab = {
       this.activityMap = await window.RV.api.getActivityMap(window.RV.popup.userId);
     } catch {
       this.activityMap = {};
+    }
+  },
+
+  async loadRatings() {
+    try {
+      const monthPrefix = `${this.calYear}-${String(this.calMonth + 1).padStart(2, "0")}`;
+      this.ratingsMap = await window.RV.api.getRatings(window.RV.popup.userId, monthPrefix);
+    } catch {
+      this.ratingsMap = {};
     }
   },
 
@@ -50,14 +61,17 @@ window.RV.calendarTab = {
     const firstDay = new Date(this.calYear, this.calMonth, 1).getDay();
     const daysInMonth = new Date(this.calYear, this.calMonth + 1, 0).getDate();
     const todayFull = window.RV.utils.todayStr();
+    const monthPrefix = `${this.calYear}-${String(this.calMonth + 1).padStart(2, "0")}`;
     for (let i = 0; i < firstDay; i++) {
       const el = document.createElement("div");
       el.className = "cal-cell empty";
       grid.appendChild(el);
     }
     for (let d = 1; d <= daysInMonth; d++) {
-      const ds = `${this.calYear}-${String(this.calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const ds = `${monthPrefix}-${String(d).padStart(2, "0")}`;
       const count = this.activityMap[ds] || 0;
+      let rating = this.ratingsMap[ds] || 0;
+      if (rating === 0 && ds < todayFull) rating = 1;
       const el = document.createElement("div");
       el.textContent = d;
       let cls = "cal-cell";
@@ -66,11 +80,35 @@ window.RV.calendarTab = {
       if (count >= 1 && count <= 2) cls += " heat-1";
       else if (count >= 3 && count <= 5) cls += " heat-2";
       else if (count > 5) cls += " heat-3";
+      if (rating > 0) {
+        cls += ` rating-${rating}`;
+        if (rating <= 3) cls += " wasted";
+      }
       el.className = cls;
-      el.title = count > 0 ? `${count} item${count > 1 ? "s" : ""}` : "";
+      if (rating > 0 && rating <= 3) {
+        el.innerHTML = d + '<span class="cal-x">✕</span>';
+      }
+      const titleText = count > 0 ? `${count} item${count > 1 ? "s" : ""}` : "";
+      const ratingText = rating > 0 ? ` | ${rating}★` : "";
+      el.title = titleText + ratingText;
       if (count > 0) el.addEventListener("click", () => this.loadDayDetail(ds, el));
+      else el.addEventListener("click", () => this.showRateOption(ds));
       grid.appendChild(el);
     }
+  },
+
+  async showRateOption(dateStr) {
+    const container = document.getElementById("calDayDetail");
+    container.innerHTML = `<div class="cal-detail-date">${window.RV.utils.fmtDate(dateStr)}</div><div class="rating-picker"><p style="margin:0 0 8px">Rate this day:</p><div class="star-row">${[1,2,3,4,5].map(n => `<button class="star-btn" data-rating="${n}" data-date="${dateStr}">★</button>`).join("")}</div></div>`;
+    container.querySelectorAll(".star-btn").forEach(btn => {
+      btn.addEventListener("click", async e => {
+        const rating = parseInt(e.target.dataset.rating);
+        const date = e.target.dataset.date;
+        await window.RV.api.saveRating(window.RV.popup.userId, date, rating);
+        await this.loadRatings();
+        this.render();
+      });
+    });
   },
 
   async loadDayDetail(dateStr, cellEl) {

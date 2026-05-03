@@ -21,7 +21,7 @@
       await window.RV.calendarTab.init();
       await Promise.all([
         window.RV.calendarTab.loadActivityMap(),
-        window.RV.todayTab.render(this.userId),
+        window.RV.todayTab.renderWithRating(this.userId),
         window.RV.streakService.loadStreak(this.userId)
       ]);
       window.RV.calendarTab.render();
@@ -114,7 +114,7 @@
           document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
           btn.classList.add("active");
           document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
-          if (btn.dataset.tab === "today") window.RV.todayTab.render(this.userId);
+          if (btn.dataset.tab === "today") window.RV.todayTab.renderWithRating(this.userId);
           if (btn.dataset.tab === "vault") window.RV.vaultTab.render(this.userId);
           if (btn.dataset.tab === "calendar") window.RV.calendarTab.loadActivityMap().then(() => window.RV.calendarTab.render());
           if (btn.dataset.tab === "analytics") window.RV.analyticsTab.render(this.userId);
