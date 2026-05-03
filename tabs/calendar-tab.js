@@ -71,7 +71,8 @@ window.RV.calendarTab = {
       const ds = `${monthPrefix}-${String(d).padStart(2, "0")}`;
       const count = this.activityMap[ds] || 0;
       let rating = this.ratingsMap[ds] || 0;
-      if (rating === 0 && ds < todayFull) rating = 1;
+      const startDate = "2026-04-12";
+      if (rating === 0 && ds < todayFull && ds >= startDate) rating = 1;
       const el = document.createElement("div");
       el.textContent = d;
       let cls = "cal-cell";
@@ -82,10 +83,10 @@ window.RV.calendarTab = {
       else if (count > 5) cls += " heat-3";
       if (rating > 0) {
         cls += ` rating-${rating}`;
-        if (rating <= 3) cls += " wasted";
+        if (rating <= 2) cls += " wasted";
       }
       el.className = cls;
-      if (rating > 0 && rating <= 3) {
+      if (rating > 0 && rating <= 2) {
         el.innerHTML = d + '<span class="cal-x">✕</span>';
       }
       const titleText = count > 0 ? `${count} item${count > 1 ? "s" : ""}` : "";
