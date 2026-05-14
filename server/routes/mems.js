@@ -59,6 +59,19 @@ router.get("/:userId/due-today", async (req, res) => {
   }
 });
 
+// NEW: mems that had a review scheduled on a specific past date
+router.get("/:userId/due-on/:date", async (req, res) => {
+  try {
+    const { userId, date } = req.params;
+    const mems = await Mem.find({ userId, nextReviewDates: date }).sort({ createdAt: -1 });
+    debug("Due-on-date mems fetched", { userId, date, count: mems.length });
+    res.json({ ok: true, mems });
+  } catch (e) {
+    error("Due-on-date mems fetch failed", { userId: req.params.userId, date: req.params.date, error: e.message, stack: e.stack });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get("/:userId/by-date/:date", async (req, res) => {
   try {
     const mems = await Mem.find({ userId: req.params.userId, savedDate: req.params.date });

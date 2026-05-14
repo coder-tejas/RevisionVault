@@ -92,8 +92,12 @@ window.RV.calendarTab = {
       const titleText = count > 0 ? `${count} item${count > 1 ? "s" : ""}` : "";
       const ratingText = rating > 0 ? ` | ${rating}★` : "";
       el.title = titleText + ratingText;
-      if (count > 0) el.addEventListener("click", () => this.loadDayDetail(ds, el));
-      else el.addEventListener("click", () => this.showRateOption(ds));
+
+      // All past days and today are clickable — show full day detail
+      if (ds <= todayFull) {
+        el.style.cursor = "pointer";
+        el.addEventListener("click", () => this.loadDayDetail(ds, el));
+      }
       grid.appendChild(el);
     }
   },
@@ -114,28 +118,107 @@ window.RV.calendarTab = {
 
   async loadDayDetail(dateStr, cellEl) {
     document.querySelectorAll(".cal-cell.selected").forEach(c => c.classList.remove("selected"));
-    cellEl.classList.add("selected");
+    if (cellEl) cellEl.classList.add("selected");
     const container = document.getElementById("calDayDetail");
+    const userId = window.RV.popup.userId;
+    const todayFull = window.RV.utils.todayStr();
+    const isPast = dateStr < todayFull;
+
     container.innerHTML = `<div class="cal-detail-date">${window.RV.utils.fmtDate(dateStr)}</div><div class="empty-state" style="padding:10px"><p>Loading…</p></div>`;
+
     try {
-      const all = await window.RV.api.getItemsByDate(window.RV.popup.userId, dateStr);
-      container.innerHTML = `<div class="cal-detail-date">${window.RV.utils.fmtDate(dateStr)} — ${all.length} item${all.length !== 1 ? "s" : ""}</div>`;
-      if (all.length === 0) {
-        container.innerHTML += `<div class="empty-state" style="padding:10px"><p>Nothing saved.</p></div>`;
-        return;
+      // Fetch saved items (what was studied on this day) + todos for this day in parallel
+      const [savedItems, todos] = await Promise.all([
+        window.RV.api.getItemsByDate(userId, dateStr),
+        window.RV.api.getTodos(userId, dateStr)
+      ]);
+
+      // For past days, also fetch which items were scheduled for review on that day
+      let reviewItems = [];
+      if (isPast) {
+        try {
+          reviewItems = await this._getItemsDueOnDate(userId, dateStr);
+        } catch { /* ignore */ }
       }
-      all.forEach(item => {
-        const el = document.createElement("div");
-        el.className = "cal-detail-item";
-        if (item._type === "mem") {
-          el.innerHTML = `<div class="cal-detail-cat">${window.RV.utils.catBadge(item.category)}</div><div class="cal-detail-body"><span class="type-tag type-mem" style="margin-bottom:2px;display:inline-block">📝 note</span><span class="cal-detail-note">${window.RV.utils.esc(item.content.slice(0, 80))}${item.content.length > 80 ? "…" : ""}</span></div>`;
-        } else {
-          el.innerHTML = `<div class="cal-detail-cat">${window.RV.utils.catBadge(item.category)}</div><div class="cal-detail-body"><a class="cal-detail-url" href="${window.RV.utils.esc(item.url)}" target="_blank">${window.RV.utils.shortUrl(item.url, 36)}</a>${item.note ? `<span class="cal-detail-note">"${window.RV.utils.esc(item.note)}"</span>` : ""}</div>`;
-        }
-        container.appendChild(el);
-      });
-    } catch {
+
+      container.innerHTML = `<div class="cal-detail-date">${window.RV.utils.fmtDate(dateStr)}</div>`;
+
+      // ── SAVED (studied) items section ──
+      if (savedItems.length > 0) {
+        const savedHdr = document.createElement("div");
+        savedHdr.className = "cal-section-hdr";
+        savedHdr.textContent = `📚 Saved (${savedItems.length})`;
+        container.appendChild(savedHdr);
+        savedItems.forEach(item => {
+          const el = document.createElement("div");
+          el.className = "cal-detail-item";
+          if (item._type === "mem") {
+            el.innerHTML = `<div class="cal-detail-cat">${window.RV.utils.catBadge(item.category)}</div><div class="cal-detail-body"><span class="type-tag type-mem" style="margin-bottom:2px;display:inline-block">📝 note</span><span class="cal-detail-note">${window.RV.utils.esc(item.content.slice(0, 80))}${item.content.length > 80 ? "…" : ""}</span></div>`;
+          } else {
+            el.innerHTML = `<div class="cal-detail-cat">${window.RV.utils.catBadge(item.category)}</div><div class="cal-detail-body"><a class="cal-detail-url" href="${window.RV.utils.esc(item.url)}" target="_blank">${window.RV.utils.shortUrl(item.url, 36)}</a>${item.note ? `<span class="cal-detail-note">"${window.RV.utils.esc(item.note)}"</span>` : ""}</div>`;
+          }
+          container.appendChild(el);
+        });
+      }
+
+      // ── REVIEW items due on this day (for past days) ──
+      if (isPast && reviewItems.length > 0) {
+        const revHdr = document.createElement("div");
+        revHdr.className = "cal-section-hdr cal-section-hdr-review";
+        revHdr.textContent = `🔁 Revisions Due (${reviewItems.length})`;
+        container.appendChild(revHdr);
+        reviewItems.forEach(item => {
+          const el = document.createElement("div");
+          // Find which interval was due on this date
+          const idx = (item.nextReviewDates || []).indexOf(dateStr);
+          const wasDone = idx >= 0 && (item.completedIntervals || []).includes(idx);
+          el.className = `cal-detail-item cal-review-item${wasDone ? " cal-review-done" : " cal-review-missed"}`;
+          const statusIcon = wasDone ? `<span class="cal-rev-status done" title="Completed">✓</span>` : `<span class="cal-rev-status missed" title="Missed">✗</span>`;
+          if (item._type === "mem") {
+            el.innerHTML = `<div class="cal-detail-cat">${window.RV.utils.catBadge(item.category)}</div><div class="cal-detail-body"><span class="type-tag type-mem" style="margin-bottom:2px;display:inline-block">📝 note</span><span class="cal-detail-note">${window.RV.utils.esc(item.content.slice(0, 60))}${item.content.length > 60 ? "…" : ""}</span></div>${statusIcon}`;
+          } else {
+            el.innerHTML = `<div class="cal-detail-cat">${window.RV.utils.catBadge(item.category)}</div><div class="cal-detail-body"><a class="cal-detail-url" href="${window.RV.utils.esc(item.url)}" target="_blank">${window.RV.utils.shortUrl(item.url, 28)}</a>${item.note ? `<span class="cal-detail-note">"${window.RV.utils.esc(item.note)}"</span>` : ""}</div>${statusIcon}`;
+          }
+          container.appendChild(el);
+        });
+      }
+
+      // ── TODOS section ──
+      if (todos.length > 0) {
+        const todoHdr = document.createElement("div");
+        todoHdr.className = "cal-section-hdr cal-section-hdr-todo";
+        todoHdr.textContent = `✅ Tasks (${todos.length})`;
+        container.appendChild(todoHdr);
+        todos.forEach(todo => {
+          const el = document.createElement("div");
+          el.className = `cal-detail-todo${todo.done ? " cal-todo-done" : " cal-todo-pending"}`;
+          el.innerHTML = `<span class="cal-todo-check">${todo.done ? "✓" : "○"}</span><span class="cal-todo-text">${window.RV.utils.esc(todo.text)}</span>`;
+          container.appendChild(el);
+        });
+      }
+
+      // Empty state if nothing at all
+      if (savedItems.length === 0 && todos.length === 0 && reviewItems.length === 0) {
+        container.innerHTML += `<div class="empty-state" style="padding:10px"><p>Nothing on this day.</p></div>`;
+      }
+
+    } catch (e) {
       container.innerHTML += `<div class="empty-state" style="padding:8px"><p>❌ Error loading.</p></div>`;
+    }
+  },
+
+  // Fetch all items that had a review scheduled on a specific date
+  async _getItemsDueOnDate(userId, dateStr) {
+    try {
+      const [ir, mr] = await Promise.all([
+        fetch(`http://localhost:3001/api/items/${userId}/due-on/${dateStr}`),
+        fetch(`http://localhost:3001/api/mems/${userId}/due-on/${dateStr}`)
+      ]);
+      const items = ((await ir.json()).items || []).map(i => ({ ...i, _type: "url" }));
+      const mems = ((await mr.json()).mems || []).map(m => ({ ...m, _type: "mem" }));
+      return [...items, ...mems];
+    } catch {
+      return [];
     }
   }
 };

@@ -64,6 +64,19 @@ router.get("/:userId/due-today", async (req, res) => {
   }
 });
 
+// NEW: items that had a review scheduled on a specific past date
+router.get("/:userId/due-on/:date", async (req, res) => {
+  try {
+    const { userId, date } = req.params;
+    const items = await Item.find({ userId, nextReviewDates: date }).sort({ createdAt: -1 });
+    debug("Due-on-date items fetched", { userId, date, count: items.length });
+    res.json({ ok: true, items });
+  } catch (e) {
+    error("Due-on-date fetch failed", { userId: req.params.userId, date: req.params.date, error: e.message, stack: e.stack });
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get("/:userId/by-date/:date", async (req, res) => {
   try {
     const items = await Item.find({ userId: req.params.userId, savedDate: req.params.date });
